@@ -1,7 +1,9 @@
 // The HUD: cash, health, wanted stars, ammo, the current job, the district
-// name and a live minimap. The minimap is a small top-down of the whole city
-// with the player, the mission target, police and traffic as dots. All of it
-// is canvas-drawn, no DOM, so it scales with the game.
+// name and a live minimap.
+//
+// The minimap is a small top-down of the whole city with the player, the
+// mission target, police and traffic as dots. Everything is canvas-drawn —
+// no DOM — so it scales with the game window.
 
 import { WORLD, PITCH, PALETTE, DEBT } from './config.js';
 import { districtAt } from './city.js';
@@ -26,7 +28,7 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.fillStyle = PALETTE.hudText;
   ctx.font = '13px sans-serif';
   ctx.fillText('Debt left: $' + missions.debtRemaining().toLocaleString('en-US'), pad + 14, pad + 56);
-  // Health bar.
+  // Health bar: green while healthy, red when it gets grim.
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(pad + 14, pad + 66, 150, 10);
   ctx.fillStyle = player.health > 30 ? PALETTE.health : PALETTE.damage;
@@ -35,7 +37,7 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.fillText('HP ' + Math.ceil(player.health), pad + 172, pad + 76);
   ctx.fillText('Ammo ' + player.ammo + (player.car ? '   •   DRIVING' : ''), pad + 14, pad + 96);
 
-  // --- Top-right: wanted stars.
+  // --- Top-right: wanted stars, filled for the current heat.
   ctx.fillStyle = PALETTE.hudPanel;
   const starW = 150;
   ctx.beginPath();
@@ -49,7 +51,7 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.fillText(stars, vw - pad - starW / 2, pad + 36);
   ctx.textAlign = 'left';
 
-  // --- District + job, top centre.
+  // --- Top centre: district, city, and the current job.
   const district = districtAt(player.x, player.y);
   ctx.fillStyle = PALETTE.hudPanel;
   const dcW = 250;
@@ -59,7 +61,7 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.fillStyle = PALETTE.hudPink;
   ctx.font = 'bold 17px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(district + '  •  ' + CITY_LABEL(world), vw / 2, pad + 22);
+  ctx.fillText(district + '  •  ' + 'Vice Bay', vw / 2, pad + 22);
   ctx.fillStyle = PALETTE.hudText;
   ctx.font = '13px sans-serif';
   ctx.fillText(missions.progressText(), vw / 2, pad + 42);
@@ -81,7 +83,7 @@ export function drawHud(ctx, world, vw, vh, time) {
     ctx.textAlign = 'left';
   }
 
-  // --- Toast (mission updates, pickups).
+  // --- Toast: mission updates and pickup confirmations.
   if (world.toastTimer > 0 && world.toast) {
     ctx.font = 'bold 17px sans-serif';
     const w = ctx.measureText(world.toast).width + 28;
@@ -95,7 +97,7 @@ export function drawHud(ctx, world, vw, vh, time) {
     ctx.textAlign = 'left';
   }
 
-  // --- Minimap, bottom-right.
+  // --- Minimap, bottom-right: roads, water, target, police, traffic, Vic.
   const mapSize = 168;
   const mx = vw - pad - mapSize;
   const my = vh - pad - mapSize;
@@ -110,17 +112,15 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.clip();
   ctx.fillStyle = '#3d5a3a';
   ctx.fillRect(mx, my, mapSize, mapSize);
-  // Roads.
   ctx.fillStyle = '#3a3d44';
   for (let i = 0; i <= WORLD.blocks; i += 1) {
     const c = i * PITCH + 35;
     ctx.fillRect(mx, my + (c - 35) * scale, mapSize, 70 * scale);
     ctx.fillRect(mx + (c - 35) * scale, my, 70 * scale, mapSize);
   }
-  // Water.
   ctx.fillStyle = '#2e7fa8';
-  ctx.fillRect(mx, my + (WORLD.waterY) * scale, mapSize, (WORLD.size - WORLD.waterY) * scale);
-  // Mission target.
+  ctx.fillRect(mx, my + WORLD.waterY * scale, mapSize, (WORLD.size - WORLD.waterY) * scale);
+  // The mission target pulses gold.
   const target = missions.stepTarget();
   if (target && missions.active) {
     const pulse = 3 + Math.sin(time * 5) * 1.5;
@@ -129,17 +129,15 @@ export function drawHud(ctx, world, vw, vh, time) {
     ctx.arc(mx + target.x * scale, my + target.y * scale, 5 + pulse, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Police.
+  // Police in blue, traffic in white, Vic in pink.
   ctx.fillStyle = '#3a6fd8';
   for (const car of world.police.cars) {
     ctx.fillRect(mx + car.x * scale - 2, my + car.y * scale - 2, 4, 4);
   }
-  // Traffic.
   ctx.fillStyle = 'rgba(245,242,232,0.75)';
   for (const car of world.traffic.cars) {
     ctx.fillRect(mx + car.x * scale - 1, my + car.y * scale - 1, 2, 2);
   }
-  // Player.
   ctx.fillStyle = '#ff5da2';
   ctx.beginPath();
   ctx.arc(mx + player.x * scale, my + player.y * scale, 5, 0, Math.PI * 2);
@@ -149,7 +147,7 @@ export function drawHud(ctx, world, vw, vh, time) {
   ctx.stroke();
   ctx.restore();
 
-  // --- Radio station, bottom-left above the controls hint.
+  // --- Radio station, bottom-left, above the controls hint.
   if (world.radio) {
     ctx.fillStyle = 'rgba(245,242,232,0.6)';
     ctx.font = '13px sans-serif';
@@ -163,8 +161,4 @@ export function drawHud(ctx, world, vw, vh, time) {
   }
 
   ctx.restore();
-}
-
-function CITY_LABEL(world) {
-  return 'Vice Bay';
 }
