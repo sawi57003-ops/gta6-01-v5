@@ -1,8 +1,11 @@
-// The camera and the renderer: a top-down view of Vice Bay that follows the
-// player, draws the city (roads, sidewalks, buildings with neon, parks,
-// palms, beach and water), then traffic, police, the player and the mission
-// beacon. Screens: title, play, paused, busted, wasted, complete. The camera
-// zooms out slightly at speed so driving feels fast.
+// The camera and the renderer: a top-down view of Vice Bay.
+//
+// The camera follows the player and zooms out slightly at speed, so driving
+// feels fast. The renderer draws the city — roads, sidewalks, buildings with
+// neon, parks, palms, beach and water — then traffic, police, the player and
+// the mission beacon, all clipped to the visible window so a 2700 px world
+// stays cheap to paint. Screens: title, play, paused, busted, wasted and
+// complete.
 
 import { WORLD, PITCH, PALETTE, GAME_TITLE, CITY_NAME, STORY, PLAYER_NAME } from './config.js';
 import { clamp, distance } from './random.js';
@@ -23,6 +26,8 @@ export class Camera {
     this.zoom = 1;
   }
 
+  // Ease toward the player and toward a zoom that fits the speed: the
+  // faster Vic drives, the more of the city he sees.
   follow(px, py, speed, vw, vh, dt) {
     const targetZoom = speed > 420 ? 0.78 : speed > 220 ? 0.88 : 1;
     this.zoom += (targetZoom - this.zoom) * Math.min(1, dt * 2.5);
@@ -52,11 +57,16 @@ export function createRenderer(canvas) {
   resize();
   window.addEventListener('resize', resize);
 
+  // Skip anything outside the camera's view, with a small margin.
+  function inView(view, x, y, w, h) {
+    return x <= view.x1 && x + w >= view.x0 && y <= view.y1 && y + h >= view.y0;
+  }
+
   function drawWorld(world, camera, time) {
     const cam = camera;
     ctx.save();
     ctx.clearRect(0, 0, vw, vh);
-    // Sunset gradient sky behind the world edge.
+    // A sunset gradient behind the edge of the world.
     const sky = ctx.createLinearGradient(0, 0, 0, vh);
     sky.addColorStop(0, '#1a1030');
     sky.addColorStop(0.55, '#3a1a4a');
@@ -72,17 +82,16 @@ export function createRenderer(canvas) {
     };
     const city = world.city;
 
-    // Ground: grass.
+    // Ground: grass, with darker patches for variation.
     ctx.fillStyle = PALETTE.grass;
     ctx.fillRect(0, 0, WORLD.size, WORLD.beachY);
-    // Grass variation patches.
     ctx.fillStyle = PALETTE.grassDark;
     for (let i = 0; i < 40; i += 1) {
       const gx = (i * 613) % WORLD.size;
       const gy = (i * 331) % WORLD.beachY;
       ctx.fillRect(gx, gy, 90, 46);
     }
-    // Beach sand and water.
+    // Beach sand, then the sea with a few wave lines.
     ctx.fillStyle = PALETTE.sand;
     ctx.fillRect(0, WORLD.beachY, WORLD.size, WORLD.waterY - WORLD.beachY);
     ctx.fillStyle = PALETTE.water;
@@ -93,7 +102,8 @@ export function createRenderer(canvas) {
       ctx.fillRect(wx, WORLD.waterY + 14 + ((i * 37) % 40), 70, 5);
     }
 
-    // Roads: asphalt strips along every grid line, with centre dashes.
+    // Roads: asphalt strips along every grid line, a darker centre seam,
+    // and dashed lane markings.
     ctx.fillStyle = PALETTE.asphalt;
     for (let i = 0; i <= WORLD.blocks; i += 1) {
       const c = i * PITCH + WORLD.road / 2;
@@ -106,7 +116,6 @@ export function createRenderer(canvas) {
       ctx.fillRect(0, c - 4, WORLD.size, 8);
       ctx.fillRect(c - 4, 0, 8, WORLD.beachY);
     }
-    // Lane dashes.
     ctx.fillStyle = PALETTE.lane;
     for (let i = 0; i <= WORLD.blocks; i += 1) {
       const c = i * PITCH + WORLD.road / 2;
@@ -116,9 +125,9 @@ export function createRenderer(canvas) {
       }
     }
 
-    // Parks.
+    // Parks: green lawns with a couple of round trees.
     for (const p of city.parks) {
-      if (p.x0 > view.x1 || p.x0 + p.w < view.x0 || p.y0 > view.y1 || p.y0 + p.h < view.y0) continue;
+      if (!inView(view, p.x0, p.y0, p.w, p.h)) continue;
       ctx.fillStyle = PALETTE.park;
       ctx.fillRect(p.x0, p.y0, p.w, p.h);
       ctx.fillStyle = PALETTE.tree;
@@ -127,7 +136,7 @@ export function createRenderer(canvas) {
       ctx.arc(p.x0 + p.w * 0.65, p.y0 + p.h * 0.6, 20, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Parking lots.
+    // Parking lots: grey slabs with painted bays.
     ctx.fillStyle = '#4a4d55';
     for (const lot of city.parkingLots) {
       ctx.fillRect(lot.x0, lot.y0, lot.w, lot.h);
@@ -138,9 +147,10 @@ export function createRenderer(canvas) {
         ctx.strokeRect(sx, lot.y0 + 12, 34, 60);
       }
     }
-    // Buildings with roof colour and a neon edge downtown.
+    // Buildings: a drop shadow, a coloured roof, a lighter strip and a
+    // skylight — and a pulsing neon edge on the downtown ones.
     for (const b of city.buildings) {
-      if (b.x > view.x1 || b.x + b.w < view.x0 || b.y > view.y1 || b.y + b.h < view.y0) continue;
+      if (!inView(view, b.x, b.y, b.w, b.h)) continue;
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(b.x + 5, b.y + 6, b.w, b.h);
       ctx.fillStyle = b.roof;
@@ -148,7 +158,6 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = PALETTE.buildingEdge;
       ctx.lineWidth = 2;
       ctx.strokeRect(b.x, b.y, b.w, b.h);
-      // Roof detail: a lighter inner rectangle and a skylight.
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fillRect(b.x + 8, b.y + 8, b.w - 16, 12);
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -162,7 +171,7 @@ export function createRenderer(canvas) {
         ctx.globalAlpha = 1;
       }
     }
-    // Neon signs.
+    // Neon signs, flickering gently.
     ctx.textAlign = 'center';
     for (const s of city.neonSigns) {
       if (s.x > view.x1 || s.x < view.x0 || s.y > view.y1 || s.y < view.y0) continue;
@@ -173,7 +182,7 @@ export function createRenderer(canvas) {
       ctx.fillText(s.text, s.x, s.y);
       ctx.globalAlpha = 1;
     }
-    // Palm trees.
+    // Palm trees: a trunk and five fronds.
     for (const p of city.palms) {
       if (p.x > view.x1 || p.x < view.x0 || p.y > view.y1 || p.y < view.y0) continue;
       ctx.strokeStyle = '#6a4a2a';
@@ -186,7 +195,11 @@ export function createRenderer(canvas) {
       for (let f = 0; f < 5; f += 1) {
         const a = (f / 5) * Math.PI * 2 + 0.4;
         ctx.beginPath();
-        ctx.ellipse(p.x + 3 * p.s + Math.cos(a) * 11 * p.s, p.y - 16 * p.s + Math.sin(a) * 7 * p.s, 12 * p.s, 4 * p.s, a, 0, Math.PI * 2);
+        ctx.ellipse(
+          p.x + 3 * p.s + Math.cos(a) * 11 * p.s,
+          p.y - 16 * p.s + Math.sin(a) * 7 * p.s,
+          12 * p.s, 4 * p.s, a, 0, Math.PI * 2,
+        );
         ctx.fill();
       }
       ctx.fillStyle = PALETTE.palmLight;
@@ -195,7 +208,7 @@ export function createRenderer(canvas) {
       ctx.fill();
     }
 
-    // Skid marks.
+    // Skid marks left by hard driving.
     ctx.strokeStyle = 'rgba(20,20,24,0.4)';
     ctx.lineWidth = 5;
     for (const s of world.skids) {
@@ -204,7 +217,7 @@ export function createRenderer(canvas) {
       ctx.lineTo(s.x2, s.y2);
       ctx.stroke();
     }
-    // Pickups (cash, health, ammo).
+    // Pickups: cash, health and ammo, bobbing gently.
     for (const pk of world.pickups) {
       const bob = Math.sin(time * 5 + pk.x) * 3;
       ctx.save();
@@ -233,13 +246,10 @@ export function createRenderer(canvas) {
       ctx.restore();
     }
 
-    // Parked cars.
+    // Cars: parked, traffic, police — then the people.
     for (const car of world.parkedCars) drawCar(ctx, car, time);
-    // Traffic.
     for (const car of world.traffic.cars) drawCar(ctx, car, time);
-    // Police cruisers.
     for (const car of world.police.cars) drawCar(ctx, car, time);
-    // Pedestrians.
     for (const ped of world.traffic.peds) {
       ctx.fillStyle = ped.color;
       ctx.beginPath();
@@ -250,7 +260,6 @@ export function createRenderer(canvas) {
       ctx.arc(ped.x, ped.y - 3, 4, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Police officers.
     for (const o of world.police.officers) {
       ctx.fillStyle = '#1c2733';
       ctx.beginPath();
@@ -261,7 +270,8 @@ export function createRenderer(canvas) {
       ctx.arc(o.x, o.y - 4, 5, 0, Math.PI * 2);
       ctx.fill();
     }
-    // The player (on foot: a figure; in a car: the car itself).
+    // The player: the car itself while driving, or a pink-jacketed figure
+    // with a direction tick on foot — plus the punch arc mid-swing.
     const player = world.player;
     if (player.car) {
       drawCar(ctx, player.car, time);
@@ -273,7 +283,6 @@ export function createRenderer(canvas) {
       ctx.beginPath();
       ctx.ellipse(2, 3, 14, 10, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Jacket (pink, Vic's signature) and head.
       ctx.fillStyle = '#ff5da2';
       ctx.beginPath();
       ctx.arc(0, 0, 12, 0, Math.PI * 2);
@@ -282,7 +291,6 @@ export function createRenderer(canvas) {
       ctx.beginPath();
       ctx.arc(6, 0, 6, 0, Math.PI * 2);
       ctx.fill();
-      // Direction tick.
       ctx.strokeStyle = '#f5f2e8';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -290,7 +298,6 @@ export function createRenderer(canvas) {
       ctx.lineTo(18, 0);
       ctx.stroke();
       ctx.restore();
-      // Punch arc.
       if (player.punchTimer > 0.2) {
         ctx.strokeStyle = 'rgba(255,211,77,0.9)';
         ctx.lineWidth = 4;
@@ -299,12 +306,13 @@ export function createRenderer(canvas) {
         ctx.stroke();
       }
     }
-    // Particles (cash bursts, impacts).
+    // Particles: cash bursts and impact dust.
     for (const pt of world.particles) {
       ctx.fillStyle = pt.color || '#ffd34d';
       ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4);
     }
-    // Mission beacon: a pulsing gold column and ring at the target.
+    // Mission beacon: a pulsing gold column and ring at the target, with a
+    // dashed route line from the player when it is far away.
     const target = world.missions.stepTarget();
     if (target && world.missions.active) {
       const pulse = 0.6 + 0.4 * Math.sin(time * 5);
@@ -323,9 +331,6 @@ export function createRenderer(canvas) {
       ctx.textAlign = 'center';
       ctx.fillText('▼', target.x, target.y - 34);
       ctx.restore();
-    }
-    // A route hint: a faint line from the player toward the mission target.
-    if (target && world.missions.active) {
       const d = distance(player.x, player.y, target.x, target.y);
       if (d > 260) {
         const a = Math.atan2(target.y - player.y, target.x - player.x);
@@ -348,8 +353,8 @@ export function createRenderer(canvas) {
     const cx = vw / 2;
     ctx.fillStyle = 'rgba(12,8,24,0.72)';
     ctx.fillRect(0, 0, vw, vh);
-    // Big neon title.
     ctx.textAlign = 'center';
+    // The big neon title, glowing with the dusk.
     const glow = 0.7 + 0.3 * Math.sin(time * 2.4);
     ctx.save();
     ctx.shadowColor = '#ff5da2';
@@ -386,6 +391,7 @@ export function createRenderer(canvas) {
     ctx.fillText('Best: ' + (world.best || '—') + '      •      Progress saves automatically', cx, vh - 30);
   }
 
+  // A full-screen message: paused, busted, wasted, or the debt paid.
   function drawOverlay(title, sub, hint) {
     ctx.fillStyle = 'rgba(12,8,24,0.66)';
     ctx.fillRect(0, 0, vw, vh);
