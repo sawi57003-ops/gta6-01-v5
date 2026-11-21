@@ -1,9 +1,14 @@
-// Six story jobs for the Sunset Kings. Each mission is a small chain of
-// objectives — drive to a marker, pick something up, lose the cops, deliver
-// it — with a cash reward on completion. Missions unlock in order; the
-// mission marker is a gold beacon on the map and in the world. Finishing all
-// six pays off the $60,000 debt and completes the game. Free roam opens after
-// the story is done, and the player can replay any job from the pause menu.
+// Six story jobs for the Sunset Kings.
+//
+// Each mission is a small chain of objectives — drive to a marker, pick
+// something up, lose the cops, deliver it — with a cash reward on
+// completion. Missions unlock in order; the mission marker is a gold beacon
+// on the map and in the world. Finishing all six pays off the $60,000 debt
+// and completes the game. Free roam opens after the story is done.
+//
+// Steps come in two kinds: 'go' (reach a point, optionally in a car) and
+// 'steal' (be driving the named car model). A step can also carry a
+// `wanted` level: arriving there raises the heat to at least that many stars.
 
 import { WORLD, PITCH, TUNING, DEBT } from './config.js';
 import { roadCenter, districtAt } from './city.js';
@@ -98,33 +103,31 @@ export class MissionManager {
     this.step = 0;
   }
 
-  // True when the player is close enough to complete the current step.
+  // The beacon's target: position and label of the current step.
   stepTarget() {
     const s = this.currentStep();
     return s ? { x: s.x, y: s.y, label: s.label } : null;
   }
 
-  // Advance one step; returns 'step', 'mission' or 'all'.
+  // Advance one step. Returns 'step', 'mission' or 'all' (story complete).
   advance(world) {
     const m = this.current();
     if (!m) return null;
     this.step += 1;
-    if (this.step >= m.steps.length) {
-      const reward = m.reward;
-      world.player.addCash(reward);
-      this.earned += reward;
-      this.completedCount += 1;
-      this.index += 1;
-      this.step = 0;
-      this.active = false;
-      if (this.index >= MISSIONS.length) {
-        this.done = true;
-        world.freeRoam = true;
-        return 'all';
-      }
-      return 'mission';
+    if (this.step < m.steps.length) return 'step';
+    const reward = m.reward;
+    world.player.addCash(reward);
+    this.earned += reward;
+    this.completedCount += 1;
+    this.index += 1;
+    this.step = 0;
+    this.active = false;
+    if (this.index >= MISSIONS.length) {
+      this.done = true;
+      world.freeRoam = true;
+      return 'all';
     }
-    return 'step';
+    return 'mission';
   }
 
   // A 'steal' step completes when the player is driving the target model.
@@ -134,13 +137,15 @@ export class MissionManager {
     return !!player.car && player.car.model && player.car.model.name === s.carModel;
   }
 
+  // One line for the HUD: which job, out of six.
   progressText() {
     const m = this.current();
     if (this.done) return 'All jobs done — the debt is paid.';
     if (!m) return '';
-    return `Job ${this.index + 1}/6 — ${m.title}`;
+    return 'Job ' + (this.index + 1) + '/6 — ' + m.title;
   }
 
+  // What Vic still owes the Kings.
   debtRemaining() {
     return Math.max(0, DEBT - this.earned);
   }
