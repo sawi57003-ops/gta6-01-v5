@@ -1,8 +1,9 @@
-// Traffic and pedestrians. Cars drive along the road grid, turning at
-// intersections, slowing for the car ahead and swerving gently around a
-// stopped player. Pedestrians stroll the sidewalks and flee when a gun goes
-// off or a car bears down on them. Both are seeded so the city feels alive
-// without ever leaving the road network.
+// Traffic and pedestrians — the city, alive.
+//
+// Cars drive along the road grid, turn at intersections, slow for the car
+// ahead and swerve gently around a stopped player. Pedestrians stroll the
+// sidewalks and flee when a gun goes off or a car bears down on them. Both
+// are seeded, so the city feels alive without ever leaving the road network.
 
 import { WORLD, PITCH, TUNING } from './config.js';
 import { mulberry32, pick, randRange, clamp, distance, angleTo, wrapAngle } from './random.js';
@@ -17,8 +18,8 @@ export class Traffic {
     this.rng = mulberry32(seed ^ 0x7a21d4e9);
     this.cars = [];
     this.peds = [];
-    for (let i = 0; i < 15; i += 1) this.spawnCar(true);
-    for (let i = 0; i < 26; i += 1) this.spawnPed(true);
+    for (let i = 0; i < TUNING.trafficCount; i += 1) this.spawnCar(true);
+    for (let i = 0; i < TUNING.pedCount; i += 1) this.spawnPed(true);
   }
 
   spawnCar(anywhere) {
@@ -28,7 +29,9 @@ export class Traffic {
     const horizontal = rng() < 0.5;
     const x = horizontal ? along : roadCenter(road);
     const y = horizontal ? roadCenter(road) : along;
-    const angle = horizontal ? (rng() < 0.5 ? 0 : Math.PI) : (rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+    const angle = horizontal
+      ? (rng() < 0.5 ? 0 : Math.PI)
+      : (rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
     const car = makeCar(x, y, angle, { taxi: rng() < 0.12 });
     car.speed = TUNING.trafficSpeed * randRange(rng, 0.7, 1.05);
     car.cruise = car.speed;
@@ -54,35 +57,36 @@ export class Traffic {
     return ped;
   }
 
+  // Is anything directly ahead of this car, within `gap` px and a narrow lane?
+  _blockedAhead(car, others, gap) {
+    const fwd = carForward(car);
+    for (const other of others) {
+      if (other === car) continue;
+      const dx = other.x - car.x;
+      const dy = other.y - car.y;
+      const ahead = dx * fwd.x + dy * fwd.y;
+      const side = Math.abs(dx * -fwd.y + dy * fwd.x);
+      if (ahead > 0 && ahead < gap && side < 40) return true;
+    }
+    return false;
+  }
+
   update(dt, player, world) {
     const rng = this.rng;
     // --- Cars: follow their lane, turn at intersections, avoid the player.
     for (const car of this.cars) {
       const fwd = carForward(car);
-      // Pick a lane target: keep going, and at an intersection sometimes turn.
+      // At an intersection, sometimes pick a new direction.
       const nearIntersection = onRoad(car.x, car.y) &&
         Math.abs(((car.x % PITCH) + PITCH) % PITCH - WORLD.road / 2) < 14 &&
         Math.abs(((car.y % PITCH) + PITCH) % PITCH - WORLD.road / 2) < 14;
       if (nearIntersection && rng() < dt * 0.5) {
         car.angle += (rng() < 0.5 ? 1 : -1) * Math.PI / 2;
       }
-      // Slow for a car ahead.
-      let blocked = false;
-      for (const other of this.cars) {
-        if (other === car) continue;
-        const dx = other.x - car.x;
-        const dy = other.y - car.y;
-        const ahead = dx * fwd.x + dy * fwd.y;
-        const side = Math.abs(dx * -fwd.y + dy * fwd.x);
-        if (ahead > 0 && ahead < 110 && side < 40) { blocked = true; break; }
-      }
-      const playerCar = player.car;
-      if (playerCar) {
-        const dx = playerCar.x - car.x;
-        const dy = playerCar.y - car.y;
-        const ahead = dx * fwd.x + dy * fwd.y;
-        const side = Math.abs(dx * -fwd.y + dy * fwd.x);
-        if (ahead > 0 && ahead < 120 && side < 44) blocked = true;
+      // Slow for a car ahead — traffic, or the player's car.
+      let blocked = this._blockedAhead(car, this.cars, 110);
+      if (!blocked && player.car) {
+        blocked = this._blockedAhead(car, [player.car], 120);
       }
       const targetSpeed = blocked ? 0 : car.cruise;
       car.speed += clamp(targetSpeed - car.speed, -420 * dt, 320 * dt);
@@ -126,7 +130,7 @@ export class Traffic {
       }
       ped.x = clamp(ped.x, 16, WORLD.size - 16);
       ped.y = clamp(ped.y, 16, WORLD.beachY - 16);
-      // Flee from the player's car or a gunshot.
+      // Flee from the player's car, or from a gunshot nearby.
       const dPlayer = distance(ped.x, ped.y, player.x, player.y);
       if ((player.car && dPlayer < 130) || (!player.car && player.shootTimer > 0.2 && dPlayer < 260)) {
         if (ped.flee <= 0) {
