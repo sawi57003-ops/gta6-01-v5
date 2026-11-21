@@ -1,8 +1,11 @@
-// The Vice Bay PD. A wanted level from 0 to 5 stars. At 1–2 stars a couple
-// of cruisers give chase; at 3+ they ram and box the player in; at 5 they
-// come in numbers. Cops chase the player's car on the road grid, and on foot
-// they close in to arrest him — stand still next to one for a moment at any
-// wanted level and you are busted. Outrun them and the heat cools off.
+// The Vice Bay PD.
+//
+// A wanted level from 0 to 5 stars. At 1–2 stars a couple of cruisers give
+// chase; at 3 and above they ram and box the player in; at 5 they come in
+// numbers. Cruisers chase the player's car across the road grid, and on
+// foot officers close in to arrest him — stand still next to one for a
+// moment at any wanted level and you are busted. Outrun them and the heat
+// cools off on its own.
 
 import { WORLD, PITCH, TUNING } from './config.js';
 import { mulberry32, clamp, distance, angleTo, wrapAngle } from './random.js';
@@ -19,6 +22,7 @@ export class Police {
     this.sirenTimer = 0;
   }
 
+  // How many cruisers a wanted level puts on the road.
   wantedCount(wanted) {
     if (wanted <= 0) return 0;
     if (wanted === 1) return 1;
@@ -48,19 +52,25 @@ export class Police {
     const a = rng() * Math.PI * 2;
     const x = clamp(player.x + Math.cos(a) * 260, 30, WORLD.size - 30);
     const y = clamp(player.y + Math.sin(a) * 260, 30, WORLD.beachY - 30);
-    const officer = { x, y, angle: angleTo(x, y, player.x, player.y), speed: 165, radius: 11 };
+    const officer = {
+      x, y,
+      angle: angleTo(x, y, player.x, player.y),
+      speed: 165,
+      radius: 11,
+    };
     this.officers.push(officer);
     return officer;
   }
 
   update(dt, player, world) {
     const wanted = player.wanted;
+    // A siren blip every couple of seconds while the heat is on.
     this.sirenTimer -= dt;
     if (wanted > 0 && this.sirenTimer <= 0) {
       this.sirenTimer = 1.7;
       if (world && world.sound) world.sound.sirenBlip();
     }
-    // Keep the right number of cruisers on the road.
+    // Keep the right number of cruisers on the road, one spawn at a time.
     const want = this.wantedCount(wanted);
     this.spawnTimer -= dt;
     if (this.cars.length < want && this.spawnTimer <= 0) {
@@ -85,7 +95,9 @@ export class Police {
       const diff = wrapAngle(targetAngle - car.angle);
       car.angle += clamp(diff, -2.6 * dt, 2.6 * dt);
       const d = distance(car.x, car.y, player.x, player.y);
-      const targetSpeed = d > 700 ? TUNING.policeSpeed : d > 160 ? TUNING.policeSpeed * 0.92 : TUNING.policeSpeed * 0.7;
+      const targetSpeed = d > 700
+        ? TUNING.policeSpeed
+        : d > 160 ? TUNING.policeSpeed * 0.92 : TUNING.policeSpeed * 0.7;
       car.speed += clamp(targetSpeed - car.speed, -700 * dt, 560 * dt);
       car.x += Math.cos(car.angle) * car.speed * dt;
       car.y += Math.sin(car.angle) * car.speed * dt;
@@ -95,15 +107,15 @@ export class Police {
       }
       car.x = clamp(car.x, 30, WORLD.size - 30);
       car.y = clamp(car.y, 30, WORLD.beachY - 30);
-      // Ramming the player's car damages it and shakes the player.
+      // Ramming the player's car damages its speed and shakes the player.
       if (player.car && d < 52 && Math.abs(car.speed) > 200) {
         player.car.speed *= 0.72;
         car.speed *= 0.6;
         if (world && world.onCrash) world.onCrash(car.x, car.y);
       }
       // A cruiser that touches the player on foot busts him after a beat.
-      if (!player.car && d < 34) {
-        if (world) world.bustedFlag = true;
+      if (!player.car && d < 34 && world) {
+        world.bustedFlag = true;
       }
     }
     // Officers walk the player down and arrest on contact.
@@ -112,8 +124,8 @@ export class Police {
       o.angle = a;
       o.x += Math.cos(a) * o.speed * dt;
       o.y += Math.sin(a) * o.speed * dt;
-      if (distance(o.x, o.y, player.x, player.y) < 26) {
-        if (world) world.bustedFlag = true;
+      if (distance(o.x, o.y, player.x, player.y) < 26 && world) {
+        world.bustedFlag = true;
       }
     }
   }
