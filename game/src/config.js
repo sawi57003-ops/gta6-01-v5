@@ -1,21 +1,23 @@
-// NEON VICE — tuning, layout, palette and story. One place for every number
-// the rest of the game reads, so balancing never means hunting through files.
-// The city is Vice Bay: a neon-drenched coastal town at launch week, all
-// sunset pinks, palm shade and chrome. The player is Vic Marlowe, a getaway
-// driver who owes $60,000 to the Sunset Kings. Six jobs. One week. The whole
-// bay is hiring — if you can drive, run, and stay out of the cells.
+// NEON VICE — every number the game runs on, in one place.
+//
+// Vice Bay is a neon coastal city at dusk: pink signs, palm shade, chrome
+// bumpers. Vic Marlowe is a getaway driver who owes $60,000 to the Sunset
+// Kings and has one week and six jobs to clear it. Anything that needs
+// balancing lives here, so tuning never means digging through the game.
 
 export const WORLD = {
-  size: 2700,
-  blocks: 8,
-  block: 250,
-  road: 70,
-  beachY: 2580,
-  waterY: 2632,
+  size: 2700, // the world is a square, 2700 px on a side
+  blocks: 8, // 8 x 8 city blocks
+  block: 250, // each block is 250 px across
+  road: 70, // each road is 70 px wide
+  beachY: 2580, // sand starts here, along the south edge
+  waterY: 2632, // the sea starts here — do not drive into it
 };
 
-export const PITCH = WORLD.block + WORLD.road; // 320 px from one road's edge to the next
+// Distance from one road centre to the next.
+export const PITCH = WORLD.block + WORLD.road;
 
+// How the player, the cars and the cops behave.
 export const TUNING = {
   walkSpeed: 180,
   runSpeed: 275,
@@ -28,6 +30,8 @@ export const TUNING = {
   carTurn: 2.7,
   carRadius: 17,
   trafficSpeed: 135,
+  trafficCount: 15,
+  pedCount: 26,
   policeSpeed: 610,
   punchRange: 36,
   punchDamage: 28,
@@ -39,6 +43,7 @@ export const TUNING = {
   missionRewardBase: 8000,
 };
 
+// The sunset palette: grass and sand under neon pink and cyan.
 export const PALETTE = {
   grass: '#6fae5e',
   grassDark: '#649e52',
@@ -70,13 +75,15 @@ export const PALETTE = {
   neonSign: '#ff5da2',
 };
 
-// Car paint jobs the city spawns with. Police and taxi are reserved models.
+// Paint jobs for civilian traffic. Police and taxi colours are fixed.
 export const CAR_PAINTS = [
   '#c23b2e', '#2e6fc2', '#e8b73a', '#e8e4da', '#22262b', '#7a4a9e',
   '#3fae7a', '#d86a1e', '#5a8a9e', '#b03a5a', '#8a9e2e', '#4a4a55',
   '#ff5da2', '#4dd8ff',
 ];
 
+// The cars of Vice Bay. `top` is top speed in px/s, `accel` the launch,
+// `turn` how sharply it steers. The Banshee is the one the Kings want.
 export const CAR_MODELS = [
   { name: 'Comet', top: 560, accel: 460, turn: 2.7 },
   { name: 'Voodoo', top: 520, accel: 430, turn: 2.5 },
