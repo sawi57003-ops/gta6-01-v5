@@ -1,21 +1,27 @@
-// NEON VICE — a gta6-01 entry (Node 22, standard library only). The game is
-// this directory's game/ folder: plain static files a desktop browser loads
-// offline (game/index.html and its ES modules, no library and no network
-// request). This program is the entrypoint AND the game's content pipeline: it
-// owns the content catalogue (districts, radio, cars, story beats), writes it
-// into game/src/content.js, validates the whole game against the scorer's
-// caps, then copies game/ and screenshots/ to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored
-// make.fun library.
+// NEON VICE — the gta6-01 round-5 entry (Node 22, standard library only).
+//
+// The game is this directory's game/ folder: plain static files a desktop
+// browser loads offline — game/index.html and its ES modules, no library
+// and no network request. This file is the entrypoint AND the game's
+// content pipeline. It owns the content catalogue (the districts of Vice
+// Bay, the radio stations, the car roster, the story beats, the six
+// missions), writes that catalogue into game/src/content.js, validates the
+// whole game against the scorer's caps, copies game/ and screenshots/ to
+// /output, and writes /output/dossier.json — the summary the judge reads —
+// with the vendored make.fun library.
 //
 // The game itself is an original top-down open-world crime story set in the
-// fictional coastal city of Vice Bay: drive and walk a full street grid,
-// steal cars, traffic and pedestrians, a five-star wanted level with police
-// chases, six story missions with cash rewards, combat, a HUD with a minimap
-// and a live radio station, a start screen and a localStorage save.
+// fictional coastal city of Vice Bay. Vic Marlowe, a getaway driver, owes
+// $60,000 to the Sunset Kings. Six jobs. One week. The player walks and
+// drives a full 8x8 street grid, steals cars, dodges a five-star wanted
+// level with police cruisers that chase and ram, fights on foot, and pays
+// the debt off job by job. A HUD with a live minimap and a radio station
+// keeps score; progress saves to localStorage; ?seed=N rebuilds the same
+// city and ?shot= stages a screenshot scene.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for
+// /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -26,9 +32,11 @@ import { buildDossier } from './vendor/makefun-game.ts';
 // ---------------------------------------------------------------------------
 // The game's content catalogue. This is the single source of truth for
 // game/src/content.js: the entrypoint writes it out at build time, and the
-// game reads it for the district guide, the radio stations and the car
-// roster. Editing the words or the metal of Vice Bay means editing them
-// here, in main.ts — the file the grader runs.
+// game reads it for the district guide, the radio stations, the car roster
+// and the story beats on the title screen. The mission catalogue below is
+// the same list the game runs in game/src/missions.js — the two must agree,
+// and the validator checks that they do. Editing the words or the metal of
+// Vice Bay means editing them here, in main.ts.
 // ---------------------------------------------------------------------------
 
 export const GAME_TITLE = 'NEON VICE';
@@ -58,6 +66,7 @@ export const RADIO = [
   { name: 'PALM 76', tag: 'the Kings’ own frequency' },
 ];
 
+// The cars of Vice Bay, in the same order as game/src/config.js lists them.
 export const CARS = [
   { name: 'Comet', blurb: 'A pink rocket. Quick, loud, unmistakable.' },
   { name: 'Voodoo', blurb: 'Low, heavy, and always turning heads.' },
@@ -67,6 +76,7 @@ export const CARS = [
   { name: 'Patriot', blurb: 'Big, square, and hard to stop.' },
 ];
 
+// One-liners that rotate across the title screen while the city pans.
 export const BEATS = [
   'The Kings own the night, but the night is hiring.',
   'Six jobs. One week. Sixty thousand dollars.',
@@ -74,9 +84,9 @@ export const BEATS = [
   'Drive fast. Spend faster. Stay free.',
 ];
 
-// The six jobs, in order. Each is a chain of objectives the player drives
-// or walks to; the game module missions.js carries the same list for the
-// runtime, and this copy is the entrypoint's own record for the dossier.
+// The six jobs. Rewards sum to $68,000 — the $60,000 debt, with $8,000 to
+// spare for the trouble. The game in game/src/missions.js runs this same
+// list, step by step, in this same order.
 export const MISSION_CATALOGUE = [
   { id: 'm1', title: 'First Pickup', reward: 8000, brief: 'The Kings left a package at the Marina. Drive there, grab it, bring it back to the Northside garage.' },
   { id: 'm2', title: 'Hot Wheels', reward: 9500, brief: 'A Banshee is parked on Ocean Drive and the Kings want it. Steal it, then lose the heat before you drop it at the chop shop in East Side.' },
@@ -98,7 +108,7 @@ export const FEATURES = [
   'Deterministic city: ?seed=N rebuilds the same Vice Bay; ?shot= stages a screenshot scene',
 ];
 
-// The game modules the entrypoint expects to find under game/src. If any is
+// The game modules the entrypoint expects under game/src. If any is
 // missing or empty, the build refuses — a broken game must never be handed
 // to the judge.
 const REQUIRED_MODULES = [
@@ -148,13 +158,7 @@ function fail(message: string): never {
   throw new Error('NEON VICE build refused: ' + message);
 }
 
-function validateGame(gameDir: string): { modules: number; bytes: number } {
-  const indexPath = join(gameDir, 'index.html');
-  if (!existsSync(indexPath)) fail('game/index.html is missing');
-  const index = readFileSync(indexPath, 'utf8');
-  if (!index.includes('src/main.js')) fail('game/index.html does not load src/main.js');
-  if (!index.includes(GAME_TITLE)) fail('game/index.html does not name ' + GAME_TITLE);
-
+function checkModuleSizes(gameDir: string): { modules: number; bytes: number } {
   let totalBytes = 0;
   let modules = 0;
   for (const mod of REQUIRED_MODULES) {
@@ -165,6 +169,16 @@ function validateGame(gameDir: string): { modules: number; bytes: number } {
     totalBytes += size;
     modules += 1;
   }
+  return { modules, bytes: totalBytes };
+}
+
+function checkWiring(gameDir: string): void {
+  // The entry page must load the game and name it.
+  const indexPath = join(gameDir, 'index.html');
+  if (!existsSync(indexPath)) fail('game/index.html is missing');
+  const index = readFileSync(indexPath, 'utf8');
+  if (!index.includes('src/main.js')) fail('game/index.html does not load src/main.js');
+  if (!index.includes(GAME_TITLE)) fail('game/index.html does not name ' + GAME_TITLE);
   // The runtime entrypoint must actually read the generated catalogue.
   const mainJs = readFileSync(join(gameDir, 'src', 'main.js'), 'utf8');
   if (!mainJs.includes("from './content.js'")) fail('game/src/main.js does not import ./content.js');
@@ -174,8 +188,11 @@ function validateGame(gameDir: string): { modules: number; bytes: number } {
   for (const m of MISSION_CATALOGUE) {
     if (!missionsJs.includes(m.id)) fail('game/src/missions.js is missing mission ' + m.id + ' (' + m.title + ')');
     if (!missionsJs.includes(m.title)) fail('game/src/missions.js is missing the title ' + m.title);
+    if (!missionsJs.includes(String(m.reward))) fail('game/src/missions.js is missing the $' + m.reward + ' reward for ' + m.title);
   }
-  return { modules, bytes: totalBytes };
+  // The story has to add up: six jobs must clear the debt with room to spare.
+  const totalReward = MISSION_CATALOGUE.reduce((sum, m) => sum + m.reward, 0);
+  if (totalReward < DEBT) fail('mission rewards total $' + totalReward + ', below the $' + DEBT + ' debt');
 }
 
 function countFiles(dir: string): number {
@@ -200,7 +217,8 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 writeFileSync(join(gameDir, 'src', 'content.js'), contentJs());
 
 // 2. Validate the game before anything is copied.
-const checked = validateGame(gameDir);
+const checked = checkModuleSizes(gameDir);
+checkWiring(gameDir);
 const gameFiles = countFiles(gameDir);
 if (gameFiles > 993) fail('game/ holds ' + gameFiles + ' files, over the scorer cap of 993');
 
